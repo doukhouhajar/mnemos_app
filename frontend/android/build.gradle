@@ -1,0 +1,69 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    ext {
+        buildToolsVersion = "33.0.0"
+        minSdkVersion = 21
+        compileSdkVersion = 33
+        targetSdkVersion = 33
+
+        // We use NDK 23 which has both M1 support and is the side-by-side NDK version from AGP.
+        ndkVersion = "23.1.7779620"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.0.1")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+    }
+}
+
+// Enable BuildConfig for all subprojects (required for AGP 8.0+)
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                buildFeatures {
+                    buildConfig = true
+                }
+                // Align Java target
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_11
+                    targetCompatibility JavaVersion.VERSION_11
+                }
+            }
+        }
+
+        // Align Kotlin target - apply to all Kotlin compilation tasks
+        project.tasks.configureEach { task ->
+            if (task.name.contains('Kotlin') && task.name.contains('Compile')) {
+                try {
+                    def kotlinOptionsMethod = task.metaClass.getMetaMethod('kotlinOptions', [])
+                    if (kotlinOptionsMethod) {
+                        task.kotlinOptions {
+                            jvmTarget = "11"
+                        }
+                    }
+                } catch (Exception e) {
+                    // Task doesn't support kotlinOptions, skip
+                }
+            }
+        }
+
+        // Also try the plugin-based approach
+        project.plugins.withId("org.jetbrains.kotlin.android") {
+            try {
+                def kotlinCompileClass = Class.forName('org.jetbrains.kotlin.gradle.tasks.KotlinCompile')
+                project.tasks.withType(kotlinCompileClass).configureEach {
+                    kotlinOptions {
+                        jvmTarget = "11"
+                    }
+                }
+            } catch (ClassNotFoundException e) {
+                // Kotlin plugin not available, skip
+            }
+        }
+    }
+}
