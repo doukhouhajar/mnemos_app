@@ -55,7 +55,18 @@ export const AIAssistedForm: React.FC<AIAssistedFormProps> = ({
       setAiGenerated(structured);
     } catch (err: any) {
       console.error('AI generation error:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to generate with AI. Make sure OPENAI_API_KEY is set.');
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to generate with AI';
+      
+      // Provide more helpful error messages
+      if (errorMessage.includes('API key') || errorMessage.includes('401') || errorMessage.includes('Invalid')) {
+        setError('AI service unavailable: Invalid or missing OpenAI API key. Please check backend/.env file and ensure OPENAI_API_KEY is set correctly.');
+      } else if (errorMessage.includes('503') || errorMessage.includes('not available')) {
+        setError('AI service unavailable: OpenAI API key not configured. Please set OPENAI_API_KEY in backend/.env file.');
+      } else if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+        setError('AI service temporarily unavailable: Rate limit exceeded. Please try again in a few moments.');
+      } else {
+        setError(`AI generation error: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }

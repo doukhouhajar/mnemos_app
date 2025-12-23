@@ -2,7 +2,7 @@
  * Main App Component with Enhanced Navigation
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -27,19 +27,34 @@ const CURRENT_USER_ID = '00000000-0000-0000-0000-000000000123';
 function ExperienceTypeScreen({ route, navigation }: any) {
   const { memoryObject } = route.params;
 
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
   const handleTypeSelect = async (type: ExperienceType) => {
     try {
-      const experiences = await api.generateExperiences(memoryObject.id, 1);
+      // Generate experience with the specific type
+      const experiences = await api.generateExperiences(memoryObject.id, 1, type);
       let experience: ExperienceInstance;
       
       if (experiences.length > 0) {
         experience = { ...experiences[0], template_type: type };
       } else {
+        // Fallback: generate prompt based on type
+        const prompts: Record<ExperienceType, string> = {
+          free_recall: `Recall ${memoryObject.title} from memory. Write down everything you remember about it without looking at any notes.`,
+          cued_recall: `What is ${memoryObject.title}? Use the following hint: ${memoryObject.intuition}`,
+          application: `Apply your knowledge of ${memoryObject.title}. ${memoryObject.examples.length > 0 ? `Example: ${memoryObject.examples[0]}` : 'Think of a practical application.'}`,
+          explain_simply: `Explain ${memoryObject.title} as if you're teaching it to someone who has never heard of it. Keep it simple and clear.`,
+          misconception_detection: `Identify common misconceptions about ${memoryObject.title}. What mistakes do people often make when learning this?`,
+          micro_teach: `Teach ${memoryObject.title} in your own words. Include the definition, key intuition, and an example.`,
+        };
+        
         experience = {
-          id: 'exp-1',
+          id: `exp-${Date.now()}`,
           memory_object_id: memoryObject.id,
           template_type: type,
-          prompt: `Recall: ${memoryObject.title}\n\n${memoryObject.definition}`,
+          prompt: prompts[type] || prompts.free_recall,
           metadata: {},
         };
       }
@@ -50,11 +65,21 @@ function ExperienceTypeScreen({ route, navigation }: any) {
       });
     } catch (error) {
       console.error('Error generating experiences:', error);
+      // Fallback with type-specific prompt
+      const prompts: Record<ExperienceType, string> = {
+        free_recall: `Recall ${memoryObject.title} from memory. Write down everything you remember.`,
+        cued_recall: `What is ${memoryObject.title}? Hint: ${memoryObject.intuition}`,
+        application: `Apply ${memoryObject.title} to solve a problem.`,
+        explain_simply: `Explain ${memoryObject.title} simply.`,
+        misconception_detection: `What are common misconceptions about ${memoryObject.title}?`,
+        micro_teach: `Teach ${memoryObject.title} in your own words.`,
+      };
+      
       const experience: ExperienceInstance = {
-        id: 'exp-1',
+        id: `exp-${Date.now()}`,
         memory_object_id: memoryObject.id,
         template_type: type,
-        prompt: `Recall: ${memoryObject.title}\n\n${memoryObject.definition}`,
+        prompt: prompts[type] || prompts.free_recall,
         metadata: {},
       };
       navigation.navigate('MemoryExperience', {
@@ -68,6 +93,7 @@ function ExperienceTypeScreen({ route, navigation }: any) {
     <ExperienceTypeSelector
       selectedType={undefined}
       onSelect={handleTypeSelect}
+      onBack={handleBack}
     />
   );
 }
@@ -76,8 +102,16 @@ function ExperienceTypeScreen({ route, navigation }: any) {
 function ExperienceScreen({ route, navigation }: any) {
   const { memoryObject, experience } = route.params;
 
-  const handleComplete = () => {
+  const handleBack = () => {
     navigation.goBack();
+  };
+
+  const handleComplete = () => {
+    // Navigate back to calendar and refresh
+    navigation.navigate('MainTabs', {
+      screen: 'Calendar',
+      params: { refresh: Date.now() },
+    });
   };
 
   return (
@@ -86,18 +120,29 @@ function ExperienceScreen({ route, navigation }: any) {
       experience={experience}
       userId={CURRENT_USER_ID}
       onComplete={handleComplete}
+      onBack={handleBack}
     />
   );
 }
 
 // Calendar screen component with navigation
-function CalendarScreen({ navigation }: any) {
+function CalendarScreen({ navigation, route }: any) {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Refresh calendar when returning from review
+  React.useEffect(() => {
+    if (route.params?.refresh) {
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [route.params?.refresh]);
+
   const handleMemorySelect = (memory: MemoryObject) => {
     navigation.navigate('ExperienceType', { memoryObject: memory });
   };
 
   return (
     <CalendarView
+      key={refreshKey}
       userId={CURRENT_USER_ID}
       onMemorySelect={handleMemorySelect}
     />

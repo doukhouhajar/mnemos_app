@@ -33,7 +33,9 @@ psql mnemos < src/db/schema.sql
 3. Configure environment variables:
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env with your database credentials and OpenAI API key
+# Get your OpenAI API key from: https://platform.openai.com/account/api-keys
+# Important: Replace the placeholder with your actual API key (starts with "sk-")
 ```
 
 4. Run migrations (if needed):

@@ -23,6 +23,7 @@ import { LearningMomentCapture } from './LearningMomentCapture';
 import { MemoryObjectForm } from './MemoryObjectForm';
 import { AIAssistedForm } from './AIAssistedForm';
 import { DateLearningMoments } from './DateLearningMoments';
+import { MemoryCardActions } from './MemoryCardActions';
 import { LearningMoment } from '@shared/types/domain';
 
 const { width } = Dimensions.get('window');
@@ -50,6 +51,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [showDateMoments, setShowDateMoments] = useState(false);
   const [selectedDateForMoments, setSelectedDateForMoments] = useState<Date | null>(null);
   const [selectedLearningMoment, setSelectedLearningMoment] = useState<LearningMoment | null>(null);
+  const [showMemoryActions, setShowMemoryActions] = useState(false);
+  const [selectedMemoryForActions, setSelectedMemoryForActions] = useState<MemoryObject | null>(null);
+  const [deletedMemory, setDeletedMemory] = useState<MemoryObject | null>(null);
   const [loading, setLoading] = useState(false);
   const [fabScale] = useState(new Animated.Value(1));
 
@@ -145,8 +149,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     }
   };
 
-  const handleLearningMomentSuccess = (moment: LearningMoment) => {
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+
+  const handleLearningMomentSuccess = async (moment: LearningMoment, groupIds?: string[]) => {
     setSelectedLearningMoment(moment);
+    setSelectedGroupIds(groupIds || []);
     setShowLearningMomentCapture(false);
     setShowAIAssistedForm(true);
   };
@@ -161,10 +168,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     setShowMemoryForm(true);
   };
 
-  const handleMemoryObjectSuccess = () => {
+  const handleMemoryObjectSuccess = async (memoryObject: MemoryObject) => {
+    // Share memory with selected groups
+    if (selectedGroupIds.length > 0) {
+      try {
+        await Promise.all(
+          selectedGroupIds.map(groupId =>
+            api.shareMemoryWithGroup(groupId, memoryObject.id)
+          )
+        );
+      } catch (error) {
+        console.error('Error sharing memory with groups:', error);
+      }
+    }
+
     setShowMemoryForm(false);
     setShowAIAssistedForm(false);
     setSelectedLearningMoment(null);
+    setSelectedGroupIds([]);
     loadDueMemories();
     loadScheduleStates();
   };
@@ -292,6 +313,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     key={memory.id}
                     style={styles.memoryItem}
                     onPress={() => onMemorySelect && onMemorySelect(memory)}
+                    onLongPress={() => {
+                      setSelectedMemoryForActions(memory);
+                      setShowMemoryActions(true);
+                    }}
                     activeOpacity={0.7}
                   >
                     <View style={styles.memoryContent}>
@@ -312,7 +337,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         </View>
                       )}
                     </View>
-                    <Text style={styles.chevron}>›</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedMemoryForActions(memory);
+                        setShowMemoryActions(true);
+                      }}
+                      style={styles.menuButton}
+                    >
+                      <Text style={styles.menuIcon}>⋯</Text>
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 );
               })}
@@ -356,19 +389,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </Modal>
       )}
 
-      {selectedLearningMoment && showMemoryForm && (
+      {(selectedLearningMoment || selectedMemoryForActions) && showMemoryForm && (
         <Modal
           visible={showMemoryForm}
           animationType="slide"
           presentationStyle="pageSheet"
         >
           <MemoryObjectForm
-            learningMoment={selectedLearningMoment}
+            learningMoment={selectedLearningMoment || undefined}
+            memoryObject={selectedMemoryForActions || undefined}
             userId={userId}
-            onSuccess={handleMemoryObjectSuccess}
+            onSuccess={(memory) => {
+              handleMemoryObjectSuccess(memory);
+              setSelectedMemoryForActions(null);
+            }}
             onCancel={() => {
               setShowMemoryForm(false);
               setSelectedLearningMoment(null);
+              setSelectedMemoryForActions(null);
             }}
           />
         </Modal>
@@ -392,6 +430,59 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             }
           }}
         />
+      )}
+
+      {/* Memory Actions Menu */}
+      <MemoryCardActions
+        visible={showMemoryActions}
+        memory={selectedMemoryForActions}
+        onClose={() => {
+          setShowMemoryActions(false);
+          setSelectedMemoryForActions(null);
+        }}
+        onEdit={(memory) => {
+          setSelectedMemoryForActions(memory);
+          setShowMemoryForm(true);
+        }}
+        onDelete={async (memory) => {
+          try {
+            await api.deleteMemoryObject(memory.id);
+            setDeletedMemory(memory);
+            loadDueMemories();
+            loadScheduleStates();
+            // Auto-hide undo toast after 7 seconds
+            setTimeout(() => setDeletedMemory(null), 7000);
+          } catch (error) {
+            console.error('Error deleting memory:', error);
+          }
+        }}
+        onDuplicate={async (memory) => {
+          try {
+            await api.duplicateMemoryObject(memory.id, userId);
+            loadDueMemories();
+            loadScheduleStates();
+          } catch (error) {
+            console.error('Error duplicating memory:', error);
+          }
+        }}
+      />
+
+      {/* Undo Toast */}
+      {deletedMemory && (
+        <View style={styles.undoToast}>
+          <Text style={styles.undoText}>
+            {deletedMemory.title} deleted
+          </Text>
+          <TouchableOpacity
+            onPress={async () => {
+              // In a real app, we'd restore from a soft delete
+              // For now, just hide the toast
+              setDeletedMemory(null);
+            }}
+          >
+            <Text style={styles.undoButton}>Undo</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -556,6 +647,43 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#9ca3af',
     fontWeight: '300',
+  },
+  menuButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  menuIcon: {
+    fontSize: 20,
+    color: '#6b7280',
+    fontWeight: '300',
+  },
+  undoToast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  undoText: {
+    fontSize: 15,
+    color: '#ffffff',
+    flex: 1,
+  },
+  undoButton: {
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '600',
+    marginLeft: 16,
   },
   fabContainer: {
     position: 'absolute',

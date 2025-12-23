@@ -166,6 +166,20 @@ export class MemoryService {
   }
 
   /**
+   * Delete a learning moment
+   */
+  async deleteLearningMoment(learningMomentId: string): Promise<void> {
+    const result = await query(
+      `DELETE FROM learning_moments WHERE id = $1`,
+      [learningMomentId]
+    );
+    
+    if (result.rowCount === 0) {
+      throw new Error('Learning moment not found');
+    }
+  }
+
+  /**
    * Get memories due for review
    */
   async getDueMemories(userId: UserId, atTime: Date = new Date()): Promise<MemoryObject[]> {
@@ -217,6 +231,116 @@ export class MemoryService {
       created_at: new Date(row.created_at),
       updated_at: new Date(row.updated_at),
     };
+  }
+
+  /**
+   * Update a memory object
+   */
+  async updateMemoryObject(
+    memoryObjectId: MemoryObjectId,
+    updates: Partial<Omit<MemoryObject, 'id' | 'owner_id' | 'created_at' | 'updated_at'>>
+  ): Promise<MemoryObject> {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (updates.title !== undefined) {
+      fields.push(`title = $${paramIndex++}`);
+      values.push(updates.title);
+    }
+    if (updates.definition !== undefined) {
+      fields.push(`definition = $${paramIndex++}`);
+      values.push(updates.definition);
+    }
+    if (updates.intuition !== undefined) {
+      fields.push(`intuition = $${paramIndex++}`);
+      values.push(updates.intuition);
+    }
+    if (updates.examples !== undefined) {
+      fields.push(`examples = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.examples));
+    }
+    if (updates.common_misconceptions !== undefined) {
+      fields.push(`common_misconceptions = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.common_misconceptions));
+    }
+    if (updates.reference_links !== undefined) {
+      fields.push(`reference_links = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.reference_links));
+    }
+    if (updates.metadata !== undefined) {
+      fields.push(`metadata = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.metadata));
+    }
+
+    if (fields.length === 0) {
+      throw new Error('No fields to update');
+    }
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+    values.push(memoryObjectId);
+
+    const result = await query<MemoryObject>(
+      `UPDATE memory_objects
+       SET ${fields.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Memory object not found');
+    }
+
+    return this.mapRowToMemoryObject(result.rows[0]);
+  }
+
+  /**
+   * Delete a memory object
+   */
+  async deleteMemoryObject(memoryObjectId: MemoryObjectId): Promise<void> {
+    await query(
+      `DELETE FROM memory_objects WHERE id = $1`,
+      [memoryObjectId]
+    );
+  }
+
+  /**
+   * Duplicate a memory object
+   */
+  async duplicateMemoryObject(
+    memoryObjectId: MemoryObjectId,
+    newOwnerId: UserId
+  ): Promise<MemoryObject> {
+    const original = await this.getMemoryObject(memoryObjectId);
+    if (!original) {
+      throw new Error('Memory object not found');
+    }
+
+    // Create new learning moment for the duplicate
+    const learningMomentResult = await query<LearningMoment>(
+      `INSERT INTO learning_moments (user_id, timestamp, raw_input, source)
+       VALUES ($1, CURRENT_TIMESTAMP, $2, 'manual')
+       RETURNING *`,
+      [
+        newOwnerId,
+        JSON.stringify({ text: `Duplicate of: ${original.title}` }),
+      ]
+    );
+
+    const learningMoment = this.mapRowToLearningMoment(learningMomentResult.rows[0]);
+
+    // Create duplicate memory object
+    return await this.createMemoryObject(learningMoment.id, {
+      owner_id: newOwnerId,
+      title: `${original.title} (Copy)`,
+      definition: original.definition,
+      intuition: original.intuition,
+      examples: original.examples,
+      common_misconceptions: original.common_misconceptions,
+      reference_links: original.reference_links,
+      metadata: { ...original.metadata, duplicated_from: memoryObjectId },
+    });
   }
 }
 

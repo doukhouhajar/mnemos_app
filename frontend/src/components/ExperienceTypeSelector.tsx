@@ -70,17 +70,28 @@ const EXPERIENCE_TYPES: ExperienceTypeOption[] = [
 interface ExperienceTypeSelectorProps {
   selectedType?: ExperienceType;
   onSelect: (type: ExperienceType) => void;
+  onBack?: () => void;
 }
 
 export const ExperienceTypeSelector: React.FC<ExperienceTypeSelectorProps> = ({
   selectedType,
   onSelect,
+  onBack,
 }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Choose experience type</Text>
-        <Text style={styles.subtitle}>Select how you want to review this memory</Text>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backButton}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>Choose experience type</Text>
+          <Text style={styles.subtitle}>Select how you want to review this memory</Text>
+        </View>
+        <View style={styles.backButton} />
       </View>
       
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>

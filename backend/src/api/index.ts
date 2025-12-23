@@ -7,10 +7,12 @@ import dotenv from 'dotenv';
 import { MemoryService } from '../services/memory-service';
 import { ReviewService } from '../services/review-service';
 import { AIService } from '../services/ai-service';
+import { GroupService } from '../services/group-service';
 import { SchedulerService } from '../domain/scheduler';
 import { ExperienceGenerator } from '../domain/experiences/generator';
 import { createMemoryRouter } from './routes/memory';
 import { createReviewRouter } from './routes/reviews';
+import { createGroupsRouter } from './routes/groups';
 
 dotenv.config();
 
@@ -37,6 +39,7 @@ const schedulerService = new SchedulerService();
 const experienceGenerator = new ExperienceGenerator();
 const memoryService = new MemoryService(schedulerService);
 const aiService = new AIService();
+const groupService = new GroupService();
 const reviewService = new ReviewService(
   schedulerService,
   experienceGenerator,
@@ -46,6 +49,7 @@ const reviewService = new ReviewService(
 // Routes
 app.use('/api/memory', createMemoryRouter(memoryService, reviewService, aiService));
 app.use('/api/reviews', createReviewRouter(reviewService));
+app.use('/api/groups', createGroupsRouter(groupService));
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {

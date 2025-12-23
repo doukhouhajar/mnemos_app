@@ -140,10 +140,15 @@ export class MnemosAPI {
 
   async generateExperiences(
     memoryObjectId: string,
-    count: number = 3
+    count: number = 3,
+    experienceType?: string
   ): Promise<ExperienceInstance[]> {
+    const params: any = { count };
+    if (experienceType) {
+      params.type = experienceType;
+    }
     const response = await this.client.get(`/api/reviews/${memoryObjectId}/experiences`, {
-      params: { count },
+      params,
     });
     return response.data;
   }
@@ -151,7 +156,95 @@ export class MnemosAPI {
   // AI Services
   async structureWithAI(rawInput: string): Promise<Omit<MemoryObject, 'id' | 'owner_id' | 'created_at' | 'updated_at'>> {
     const response = await this.client.post('/api/memory/ai-structure', {
-      raw_input: { text: rawInput },
+      raw_input: rawInput, // Send as string directly
+    });
+    return response.data;
+  }
+
+  // Memory Object Management
+  async updateMemoryObject(
+    memoryObjectId: string,
+    updates: Partial<Omit<MemoryObject, 'id' | 'owner_id' | 'created_at' | 'updated_at'>>
+  ): Promise<MemoryObject> {
+    const response = await this.client.put(`/api/memory/memory-objects/${memoryObjectId}`, updates);
+    return response.data;
+  }
+
+  async deleteMemoryObject(memoryObjectId: string): Promise<void> {
+    await this.client.delete(`/api/memory/memory-objects/${memoryObjectId}`);
+  }
+
+  async duplicateMemoryObject(memoryObjectId: string, userId: string): Promise<MemoryObject> {
+    const response = await this.client.post(`/api/memory/memory-objects/${memoryObjectId}/duplicate`, {
+      user_id: userId,
+    });
+    return response.data;
+  }
+
+  async deleteLearningMoment(learningMomentId: string): Promise<void> {
+    await this.client.delete(`/api/memory/learning-moments/${learningMomentId}`);
+  }
+
+  // Group Services
+  async createGroup(userId: string, name: string, description?: string): Promise<any> {
+    const response = await this.client.post('/api/groups', {
+      user_id: userId,
+      name,
+      description,
+    });
+    return response.data;
+  }
+
+  async getUserGroups(userId: string): Promise<any[]> {
+    const response = await this.client.get('/api/groups', {
+      params: { user_id: userId },
+    });
+    return response.data;
+  }
+
+  async joinGroup(groupId: string, userId: string): Promise<any> {
+    const response = await this.client.post(`/api/groups/${groupId}/join`, {
+      user_id: userId,
+    });
+    return response.data;
+  }
+
+  async leaveGroup(groupId: string, userId: string): Promise<any> {
+    const response = await this.client.post(`/api/groups/${groupId}/leave`, {
+      user_id: userId,
+    });
+    return response.data;
+  }
+
+  async getGroupMembers(groupId: string): Promise<Array<{ id: string; name: string; email: string }>> {
+    const response = await this.client.get(`/api/groups/${groupId}/members`);
+    return response.data;
+  }
+
+  async searchUsers(query: string): Promise<Array<{ id: string; name: string; email: string }>> {
+    const response = await this.client.get('/api/groups/users/search', {
+      params: { q: query },
+    });
+    return response.data;
+  }
+
+  async addMemberToGroup(groupId: string, userId: string): Promise<any> {
+    const response = await this.client.post(`/api/groups/${groupId}/members`, {
+      user_id: userId,
+    });
+    return response.data;
+  }
+
+  async shareMemoryWithGroup(groupId: string, memoryObjectId: string): Promise<any> {
+    const response = await this.client.post(`/api/groups/${groupId}/share-memory`, {
+      memory_object_id: memoryObjectId,
+    });
+    return response.data;
+  }
+
+  async unshareMemoryFromGroup(groupId: string, memoryObjectId: string): Promise<any> {
+    const response = await this.client.post(`/api/groups/${groupId}/unshare-memory`, {
+      memory_object_id: memoryObjectId,
     });
     return response.data;
   }

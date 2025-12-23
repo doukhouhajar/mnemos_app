@@ -152,10 +152,21 @@ export class ReviewService {
   /**
    * Generate experiences for a memory object
    */
-  async generateExperiences(memoryObjectId: MemoryObjectId, count: number = 3) {
+  async generateExperiences(
+    memoryObjectId: MemoryObjectId,
+    count: number = 3,
+    experienceType?: string
+  ) {
     const memoryObject = await this.memoryService.getMemoryObject(memoryObjectId);
     if (!memoryObject) {
       throw new Error('Memory object not found');
+    }
+
+    if (experienceType) {
+      // Generate single experience of specified type
+      return [
+        this.experienceGenerator.generateExperience(memoryObject, experienceType),
+      ];
     }
 
     return this.experienceGenerator.generateExperienceSet(memoryObject, count);

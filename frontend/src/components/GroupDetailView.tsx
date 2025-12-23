@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { GroupIcon } from './Icons';
+import { AddMemberForm } from './AddMemberForm';
 import { MemoryObject } from '@shared/types/domain';
 
 interface Member {
@@ -45,6 +46,7 @@ interface GroupDetailViewProps {
   onJoin: (groupId: string) => void;
   onLeave: (groupId: string) => void;
   onMemorySelect?: (memory: MemoryObject) => void;
+  onMemberAdded?: () => void;
 }
 
 export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
@@ -55,7 +57,10 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
   onJoin,
   onLeave,
   onMemorySelect,
+  onMemberAdded,
 }) => {
+  const [showAddMember, setShowAddMember] = useState(false);
+
   if (!group) return null;
 
   return (
@@ -92,9 +97,19 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Members</Text>
-              <Text style={styles.memberCount}>
-                {group.members.length} member{group.members.length !== 1 ? 's' : ''}
-              </Text>
+              <View style={styles.sectionHeaderRight}>
+                <Text style={styles.memberCount}>
+                  {group.members.length} member{group.members.length !== 1 ? 's' : ''}
+                </Text>
+                {group.isOwner && (
+                  <TouchableOpacity
+                    style={styles.addMemberButton}
+                    onPress={() => setShowAddMember(true)}
+                  >
+                    <Text style={styles.addMemberButtonText}>+ Add</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {group.members.length === 0 ? (
@@ -186,6 +201,20 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({
           </View>
         </ScrollView>
       </View>
+
+      {/* Add Member Modal */}
+      <AddMemberForm
+        visible={showAddMember}
+        groupId={group.id}
+        existingMemberIds={group.members.map(m => m.id)}
+        onClose={() => setShowAddMember(false)}
+        onSuccess={() => {
+          setShowAddMember(false);
+          if (onMemberAdded) {
+            onMemberAdded();
+          }
+        }}
+      />
     </Modal>
   );
 };
@@ -258,6 +287,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  sectionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  addMemberButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#111827',
+    borderRadius: 8,
+  },
+  addMemberButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -284,6 +329,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: '#9ca3af',
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: '#d1d5db',
+    textAlign: 'center',
   },
   membersList: {
     gap: 12,

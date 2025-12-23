@@ -11,7 +11,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "db:migrate": "node dist/db/migrate.js",
-    "db:seed": "node dist/db/seed.js"
+    "db:seed": "tsx src/db/seed.ts",
+    "db:reset": "psql $DB_NAME -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && psql $DB_NAME < src/db/schema.sql && npm run db:seed"
   },
   "keywords": ["memory", "spaced-repetition", "learning"],
   "author": "",

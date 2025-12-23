@@ -114,8 +114,13 @@ export function createReviewRouter(reviewService: ReviewService): Router {
     try {
       const { memoryObjectId } = req.params;
       const count = parseInt(req.query.count as string) || 3;
+      const experienceType = req.query.type as string | undefined;
 
-      const experiences = await reviewService.generateExperiences(memoryObjectId, count);
+      const experiences = await reviewService.generateExperiences(
+        memoryObjectId,
+        count,
+        experienceType
+      );
       res.json(experiences);
     } catch (error: any) {
       console.error('Error generating experiences:', error);

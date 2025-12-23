@@ -3,7 +3,7 @@
  * Shows user's learning groups and group activities
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,13 @@ import {
   TouchableOpacity,
   ScrollView,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { GroupIcon } from './Icons';
 import { GroupDetailView } from './GroupDetailView';
+import { CreateGroupForm } from './CreateGroupForm';
 import { MemoryObject } from '@shared/types/domain';
+import { api } from '../services/api';
 
 interface Member {
   id: string;
@@ -34,6 +37,7 @@ interface Group {
   sharedMemories: MemoryObject[];
   isMember: boolean;
   isOwner: boolean;
+  ownerId: string;
 }
 
 interface GroupsViewProps {
@@ -45,48 +49,61 @@ export const GroupsView: React.FC<GroupsViewProps> = ({
   userId,
   onGroupSelect,
 }) => {
-  const [groups] = useState<Group[]>([
-    {
-      id: 'group-1',
-      name: 'Computer Science Study Group',
-      description: 'Learning algorithms, data structures, and system design. We focus on practical problem-solving and collaborative learning.',
-      memberCount: 12,
-      activeQuests: 2,
-      members: [
-        { id: 'user-1', name: 'Alex Chen', email: 'alex@example.com', joinedAt: new Date('2024-01-15'), contributionCount: 15 },
-        { id: 'user-2', name: 'Sarah Johnson', email: 'sarah@example.com', joinedAt: new Date('2024-01-20'), contributionCount: 12 },
-        { id: 'user-3', name: 'Mike Davis', email: 'mike@example.com', joinedAt: new Date('2024-02-01'), contributionCount: 8 },
-        { id: userId, name: 'You', email: 'you@example.com', joinedAt: new Date('2024-02-10'), contributionCount: 5 },
-      ],
-      sharedMemories: [
-        { id: 'mem-1', owner_id: userId, title: 'Binary Search', definition: 'A search algorithm that finds the position of a target value within a sorted array.', intuition: 'Divide and conquer approach', examples: [], common_misconceptions: [], reference_links: [], metadata: {}, created_at: new Date(), updated_at: new Date() },
-        { id: 'mem-2', owner_id: userId, title: 'Hash Tables', definition: 'A data structure that implements an associative array abstract data type.', intuition: 'Key-value mapping for fast lookups', examples: [], common_misconceptions: [], reference_links: [], metadata: {}, created_at: new Date(), updated_at: new Date() },
-      ],
-      isMember: true,
-      isOwner: false,
-      ownerId: 'user-1',
-    },
-    {
-      id: 'group-2',
-      name: 'Language Learning Circle',
-      description: 'Spanish vocabulary and grammar practice. We share learning resources and practice together weekly.',
-      memberCount: 8,
-      activeQuests: 1,
-      members: [
-        { id: 'user-5', name: 'David Lee', email: 'david@example.com', joinedAt: new Date('2024-01-10'), contributionCount: 20 },
-        { id: 'user-6', name: 'Lisa Brown', email: 'lisa@example.com', joinedAt: new Date('2024-01-12'), contributionCount: 18 },
-      ],
-      sharedMemories: [
-        { id: 'mem-3', owner_id: userId, title: 'Present Tense Conjugation', definition: 'Regular verb endings in Spanish present tense.', intuition: 'Pattern-based conjugation rules', examples: [], common_misconceptions: [], reference_links: [], metadata: {}, created_at: new Date(), updated_at: new Date() },
-      ],
-      isMember: false,
-      isOwner: false,
-      ownerId: 'user-5',
-    },
-  ]);
-
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showGroupDetail, setShowGroupDetail] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  useEffect(() => {
+    loadGroups();
+  }, [userId]);
+
+  const loadGroups = async () => {
+    try {
+      setLoading(true);
+      const fetchedGroups = await api.getUserGroups(userId);
+      
+      // Transform API response to match Group interface
+      const transformedGroups: Group[] = await Promise.all(
+        fetchedGroups.map(async (group: any) => {
+          // Fetch members details
+          let members: Member[] = [];
+          try {
+            const memberData = await api.getGroupMembers(group.id);
+            members = memberData.map((m: any) => ({
+              id: m.id,
+              name: m.name || 'Unknown',
+              email: m.email || '',
+              joinedAt: new Date(), // API doesn't return this yet
+              contributionCount: 0, // API doesn't return this yet
+            }));
+          } catch (error) {
+            console.error('Error fetching members:', error);
+          }
+
+          return {
+            id: group.id,
+            name: group.name,
+            description: group.description || '',
+            memberCount: group.members?.length || 0,
+            activeQuests: 0, // TODO: Fetch from quests API
+            members,
+            sharedMemories: [], // TODO: Fetch from memory objects API
+            isMember: group.members?.includes(userId) || false,
+            isOwner: group.owner_id === userId,
+            ownerId: group.owner_id,
+          };
+        })
+      );
+      
+      setGroups(transformedGroups);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderGroupCard = ({ item }: { item: Group }) => (
     <TouchableOpacity
@@ -126,12 +143,19 @@ export const GroupsView: React.FC<GroupsViewProps> = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Learning Groups</Text>
-        <TouchableOpacity style={styles.createButton}>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => setShowCreateForm(true)}
+        >
           <Text style={styles.createButtonText}>+ Create Group</Text>
         </TouchableOpacity>
       </View>
 
-      {groups.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#111827" />
+        </View>
+      ) : groups.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyIconContainer}>
             <GroupIcon size={48} color="#9ca3af" />
@@ -162,28 +186,41 @@ export const GroupsView: React.FC<GroupsViewProps> = ({
           setShowGroupDetail(false);
           setSelectedGroup(null);
         }}
-        onJoin={(groupId) => {
-          // Update group membership status
-          const updatedGroups = groups.map(g =>
-            g.id === groupId ? { ...g, isMember: true } : g
-          );
-          // In a real app, this would call an API
-          console.log('Joining group:', groupId);
-          setShowGroupDetail(false);
+        onJoin={async (groupId) => {
+          try {
+            await api.joinGroup(groupId, userId);
+            loadGroups();
+            setShowGroupDetail(false);
+          } catch (error) {
+            console.error('Error joining group:', error);
+          }
         }}
-        onLeave={(groupId) => {
-          // Update group membership status
-          const updatedGroups = groups.map(g =>
-            g.id === groupId ? { ...g, isMember: false } : g
-          );
-          // In a real app, this would call an API
-          console.log('Leaving group:', groupId);
-          setShowGroupDetail(false);
+        onLeave={async (groupId) => {
+          try {
+            await api.leaveGroup(groupId, userId);
+            loadGroups();
+            setShowGroupDetail(false);
+          } catch (error) {
+            console.error('Error leaving group:', error);
+          }
         }}
         onMemorySelect={(memory) => {
           if (onGroupSelect) {
             onGroupSelect(selectedGroup!.id);
           }
+        }}
+        onMemberAdded={() => {
+          loadGroups();
+        }}
+      />
+
+      {/* Create Group Form */}
+      <CreateGroupForm
+        visible={showCreateForm}
+        userId={userId}
+        onClose={() => setShowCreateForm(false)}
+        onSuccess={() => {
+          loadGroups();
         }}
       />
     </View>
@@ -323,6 +360,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
   },
 });
 

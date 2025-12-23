@@ -154,6 +154,20 @@ export const DateLearningMoments: React.FC<DateLearningMomentsProps> = ({
                           Not yet structured into a memory
                         </Text>
                       )}
+
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={async () => {
+                          try {
+                            await api.deleteLearningMoment(moment.id);
+                            loadDateData();
+                          } catch (error) {
+                            console.error('Error deleting learning moment:', error);
+                          }
+                        }}
+                      >
+                        <Text style={styles.deleteButtonText}>Delete</Text>
+                      </TouchableOpacity>
                     </View>
                   );
                 })}
@@ -305,6 +319,19 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  deleteButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  deleteButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#dc2626',
   },
 });
 

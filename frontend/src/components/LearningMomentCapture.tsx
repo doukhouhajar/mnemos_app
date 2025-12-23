@@ -3,7 +3,7 @@
  * Clean, minimal bottom sheet with smooth interactions
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ interface LearningMomentCaptureProps {
   visible: boolean;
   userId: string;
   onClose: () => void;
-  onSuccess?: (moment: LearningMoment) => void;
+  onSuccess?: (moment: LearningMoment, groupIds?: string[]) => void;
 }
 
 export const LearningMomentCapture: React.FC<LearningMomentCaptureProps> = ({
@@ -34,7 +34,25 @@ export const LearningMomentCapture: React.FC<LearningMomentCaptureProps> = ({
 }) => {
   const [rawInput, setRawInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    if (visible) {
+      loadUserGroups();
+    }
+  }, [visible]);
+
+  const loadUserGroups = async () => {
+    try {
+      const groups = await api.getUserGroups(userId);
+      setAvailableGroups(groups);
+    } catch (error) {
+      console.error('Error loading groups:', error);
+    }
+  };
 
   React.useEffect(() => {
     if (visible) {
@@ -56,12 +74,21 @@ export const LearningMomentCapture: React.FC<LearningMomentCaptureProps> = ({
     try {
       const moment = await api.createLearningMoment(userId, { text: rawInput }, 'manual');
       setRawInput('');
-      onSuccess?.(moment);
+      onSuccess?.(moment, selectedGroupIds.length > 0 ? selectedGroupIds : undefined);
+      setSelectedGroupIds([]);
       onClose();
     } catch (error) {
       console.error('Error creating learning moment:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleGroup = (groupId: string) => {
+    if (selectedGroupIds.includes(groupId)) {
+      setSelectedGroupIds(selectedGroupIds.filter(id => id !== groupId));
+    } else {
+      setSelectedGroupIds([...selectedGroupIds, groupId]);
     }
   };
 
@@ -119,6 +146,60 @@ export const LearningMomentCapture: React.FC<LearningMomentCaptureProps> = ({
               autoFocus
               textAlignVertical="top"
             />
+
+            {availableGroups.length > 0 && (
+              <View style={styles.groupSection}>
+                <TouchableOpacity
+                  style={styles.groupToggle}
+                  onPress={() => setShowGroupSelector(!showGroupSelector)}
+                >
+                  <Text style={styles.groupToggleText}>
+                    {selectedGroupIds.length > 0
+                      ? `Share with ${selectedGroupIds.length} group${selectedGroupIds.length !== 1 ? 's' : ''}`
+                      : 'Share with group (optional)'}
+                  </Text>
+                  <Text style={styles.groupToggleIcon}>
+                    {showGroupSelector ? '▼' : '▶'}
+                  </Text>
+                </TouchableOpacity>
+
+                {showGroupSelector && (
+                  <View style={styles.groupList}>
+                    {availableGroups.map((group) => (
+                      <TouchableOpacity
+                        key={group.id}
+                        style={[
+                          styles.groupOption,
+                          selectedGroupIds.includes(group.id) && styles.groupOptionSelected,
+                        ]}
+                        onPress={() => toggleGroup(group.id)}
+                      >
+                        <View style={styles.groupOptionContent}>
+                          <View
+                            style={[
+                              styles.groupCheckbox,
+                              selectedGroupIds.includes(group.id) && styles.groupCheckboxSelected,
+                            ]}
+                          >
+                            {selectedGroupIds.includes(group.id) && (
+                              <Text style={styles.groupCheckmark}>✓</Text>
+                            )}
+                          </View>
+                          <View style={styles.groupOptionText}>
+                            <Text style={styles.groupOptionName}>{group.name}</Text>
+                            {group.description && (
+                              <Text style={styles.groupOptionDesc} numberOfLines={1}>
+                                {group.description}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -230,5 +311,78 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: -0.3,
+  },
+  groupSection: {
+    marginTop: 20,
+  },
+  groupToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  groupToggleText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#111827',
+  },
+  groupToggleIcon: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  groupList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  groupOption: {
+    padding: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  groupOptionSelected: {
+    borderColor: '#111827',
+    backgroundColor: '#f9fafb',
+  },
+  groupOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupCheckboxSelected: {
+    backgroundColor: '#111827',
+    borderColor: '#111827',
+  },
+  groupCheckmark: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  groupOptionText: {
+    flex: 1,
+  },
+  groupOptionName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  groupOptionDesc: {
+    fontSize: 13,
+    color: '#6b7280',
   },
 });

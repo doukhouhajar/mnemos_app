@@ -11,13 +11,38 @@ export class AIService {
 
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
-      this.client = new OpenAI({
-        apiKey,
-      });
-    } else {
+    
+    // Check if API key is set and not a placeholder
+    if (!apiKey) {
       console.warn('OPENAI_API_KEY not set. AI features will be disabled.');
+      return;
     }
+    
+    // Detect common placeholder values
+    const placeholderPatterns = [
+      /^your[_\s]?actual[_\s]?api[_\s]?key/i,
+      /placeholder/i,
+      /example/i,
+      /replace/i,
+      /your_key/i,
+      /^sk-your/i,
+    ];
+    
+    const isPlaceholder = placeholderPatterns.some(pattern => pattern.test(apiKey));
+    
+    // Valid OpenAI API keys start with "sk-" and are typically 32+ characters
+    const isValidFormat = apiKey.startsWith('sk-') && apiKey.length >= 32;
+    
+    if (isPlaceholder || !isValidFormat) {
+      console.warn('OPENAI_API_KEY appears to be a placeholder or invalid format. AI features will be disabled.');
+      console.warn('Please set a valid OpenAI API key in backend/.env file.');
+      console.warn('Get your API key at: https://platform.openai.com/account/api-keys');
+      return;
+    }
+    
+    this.client = new OpenAI({
+      apiKey,
+    });
   }
 
   /**
@@ -30,22 +55,24 @@ export class AIService {
       throw new Error('OpenAI API key not configured');
     }
 
-    const systemPrompt = `You are an expert at structuring learning content into clear, memorable memory objects. Always respond with valid JSON only, following the exact format specified.`;
+    const systemPrompt = `You are an expert at structuring learning content into clear, memorable memory objects. You must respond with ONLY valid JSON, no markdown, no code blocks, no explanations. Just the JSON object.`;
 
     const userPrompt = `Given the following learning moment, extract and structure it into a memory object.
 
 Learning moment:
 ${rawInput}
 
-Respond with a JSON object containing:
-- title: A brief, memorable title (max 100 characters)
-- definition: A precise, clear definition
-- intuition: How to think about this concept in practical terms
-- examples: 2-4 concrete examples (as a JSON array of strings)
-- common_misconceptions: 1-3 common misconceptions (as a JSON array of strings)
-- reference_links: Any relevant links mentioned (as a JSON array of strings)
+Respond with ONLY a JSON object (no markdown, no code blocks) containing:
+{
+  "title": "A brief, memorable title (max 100 characters)",
+  "definition": "A precise, clear definition",
+  "intuition": "How to think about this concept in practical terms",
+  "examples": ["example 1", "example 2", "example 3"],
+  "common_misconceptions": ["misconception 1", "misconception 2"],
+  "reference_links": ["link1", "link2"]
+}
 
-Format your response as JSON only.`;
+Return ONLY the JSON object, nothing else.`;
 
     try {
       const response = await this.client.chat.completions.create({
@@ -62,7 +89,6 @@ Format your response as JSON only.`;
         ],
         temperature: 0.7,
         max_tokens: 1000,
-        response_format: { type: 'json_object' },
       });
 
       const content = response.choices[0]?.message?.content;
@@ -70,11 +96,47 @@ Format your response as JSON only.`;
         throw new Error('No response from OpenAI');
       }
 
-      const parsed = JSON.parse(content);
+      // Try to extract JSON from the response (might be wrapped in markdown code blocks)
+      let jsonContent = content.trim();
+      
+      // Remove markdown code blocks if present
+      if (jsonContent.startsWith('```')) {
+        const lines = jsonContent.split('\n');
+        const startIndex = lines.findIndex(line => line.includes('```'));
+        const endIndex = lines.findIndex((line, idx) => idx > startIndex && line.includes('```'));
+        if (startIndex !== -1 && endIndex !== -1) {
+          jsonContent = lines.slice(startIndex + 1, endIndex).join('\n');
+        } else {
+          // Try to find JSON object boundaries
+          const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            jsonContent = jsonMatch[0];
+          }
+        }
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonContent);
+      } catch (parseError) {
+        // If JSON parsing fails, try to extract fields manually
+        console.warn('Failed to parse JSON, attempting manual extraction:', parseError);
+        
+        // Fallback: create a basic structure from the raw input
+        return {
+          title: rawInput.substring(0, 100).split('\n')[0] || 'Untitled',
+          definition: rawInput.substring(0, 500),
+          intuition: 'Think about this concept in practical terms.',
+          examples: [],
+          common_misconceptions: [],
+          reference_links: [],
+          metadata: { raw_ai_response: content },
+        };
+      }
       
       // Validate and structure the response
       return {
-        title: parsed.title || 'Untitled',
+        title: parsed.title || rawInput.substring(0, 100).split('\n')[0] || 'Untitled',
         definition: parsed.definition || rawInput.substring(0, 500),
         intuition: parsed.intuition || 'Think about this concept in practical terms.',
         examples: Array.isArray(parsed.examples) ? parsed.examples : [],
@@ -86,7 +148,17 @@ Format your response as JSON only.`;
       };
     } catch (error: any) {
       console.error('Error calling OpenAI:', error);
-      throw new Error(`AI processing failed: ${error.message}`);
+      
+      // Provide more helpful error messages
+      if (error.status === 401 || error.message?.includes('401') || error.message?.includes('Incorrect API key')) {
+        throw new Error('AI processing failed: Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.');
+      } else if (error.status === 429 || error.message?.includes('429')) {
+        throw new Error('AI processing failed: Rate limit exceeded. Please try again later.');
+      } else if (error.status === 500 || error.message?.includes('500')) {
+        throw new Error('AI processing failed: OpenAI service error. Please try again later.');
+      } else {
+        throw new Error(`AI processing failed: ${error.message || 'Unknown error'}`);
+      }
     }
   }
 
@@ -95,6 +167,37 @@ Format your response as JSON only.`;
    */
   isAvailable(): boolean {
     return this.client !== null;
+  }
+
+  /**
+   * Get availability status with reason
+   */
+  getAvailabilityStatus(): { available: boolean; reason?: string } {
+    if (!process.env.OPENAI_API_KEY) {
+      return { 
+        available: false, 
+        reason: 'OPENAI_API_KEY not set in environment variables' 
+      };
+    }
+    
+    const apiKey = process.env.OPENAI_API_KEY;
+    const isValidFormat = apiKey.startsWith('sk-') && apiKey.length >= 32;
+    
+    if (!isValidFormat) {
+      return { 
+        available: false, 
+        reason: 'OPENAI_API_KEY appears to be invalid or a placeholder. Please set a valid API key in backend/.env file. Get your key at https://platform.openai.com/account/api-keys' 
+      };
+    }
+    
+    if (!this.client) {
+      return { 
+        available: false, 
+        reason: 'AI service client not initialized' 
+      };
+    }
+    
+    return { available: true };
   }
 }
 

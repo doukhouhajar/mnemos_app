@@ -63,7 +63,7 @@ mnemos/
    - ReviewService: Processes reviews and updates schedules
    - Metacognition tracking
 
-### ✅ Frontend
+### Frontend
 
 1. **Calendar View Component**
    - Calendar-native UI

@@ -23,6 +23,7 @@ interface MemoryExperienceProps {
   memoryObject: MemoryObject;
   userId: string;
   onComplete?: (result: RecallResult, confidence: number, latency: number) => void;
+  onBack?: () => void;
 }
 
 export const MemoryExperience: React.FC<MemoryExperienceProps> = ({
@@ -30,6 +31,7 @@ export const MemoryExperience: React.FC<MemoryExperienceProps> = ({
   memoryObject,
   userId,
   onComplete,
+  onBack,
 }) => {
   const [userResponse, setUserResponse] = useState('');
   const [confidence, setConfidence] = useState(50);
@@ -83,7 +85,14 @@ export const MemoryExperience: React.FC<MemoryExperienceProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={styles.backButton}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
         <Text style={styles.memoryTitle}>{memoryObject.title}</Text>
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

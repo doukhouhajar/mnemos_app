@@ -18,7 +18,8 @@ import { MemoryObject, LearningMoment } from '@shared/types/domain';
 import { api } from '../services/api';
 
 interface MemoryObjectFormProps {
-  learningMoment: LearningMoment;
+  learningMoment?: LearningMoment;
+  memoryObject?: MemoryObject; // For editing existing memory
   userId: string;
   onSuccess?: (memoryObject: MemoryObject) => void;
   onCancel?: () => void;
@@ -26,16 +27,24 @@ interface MemoryObjectFormProps {
 
 export const MemoryObjectForm: React.FC<MemoryObjectFormProps> = ({
   learningMoment,
+  memoryObject,
   userId,
   onSuccess,
   onCancel,
 }) => {
-  const [title, setTitle] = useState('');
-  const [definition, setDefinition] = useState('');
-  const [intuition, setIntuition] = useState('');
-  const [examples, setExamples] = useState('');
-  const [misconceptions, setMisconceptions] = useState('');
-  const [referenceLinks, setReferenceLinks] = useState('');
+  const isEditMode = !!memoryObject;
+  const [title, setTitle] = useState(memoryObject?.title || '');
+  const [definition, setDefinition] = useState(memoryObject?.definition || '');
+  const [intuition, setIntuition] = useState(memoryObject?.intuition || '');
+  const [examples, setExamples] = useState(
+    memoryObject?.examples.join('\n') || ''
+  );
+  const [misconceptions, setMisconceptions] = useState(
+    memoryObject?.common_misconceptions.join('\n') || ''
+  );
+  const [referenceLinks, setReferenceLinks] = useState(
+    memoryObject?.reference_links.join('\n') || ''
+  );
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -45,6 +54,25 @@ export const MemoryObjectForm: React.FC<MemoryObjectFormProps> = ({
 
     setLoading(true);
     try {
+      if (isEditMode && memoryObject) {
+        // Update existing memory
+        const updated = await api.updateMemoryObject(memoryObject.id, {
+          title: title.trim(),
+          definition: definition.trim(),
+          intuition: intuition.trim(),
+          examples: examples.split('\n').filter(e => e.trim()),
+          common_misconceptions: misconceptions.split('\n').filter(m => m.trim()),
+          reference_links: referenceLinks.split('\n').filter(r => r.trim()),
+        });
+        if (onSuccess) onSuccess(updated);
+        return;
+      }
+
+      // Create new memory from learning moment
+      if (!learningMoment) {
+        throw new Error('Learning moment is required for new memories');
+      }
+
       const memoryData = {
         owner_id: userId,
         title: title.trim(),

@@ -162,20 +162,112 @@ export function createMemoryRouter(
    */
   router.post('/ai-structure', async (req: Request, res: Response) => {
     try {
-      if (!aiService || !aiService.isAvailable()) {
-        return res.status(503).json({ error: 'AI service is not available. Please set OPENAI_API_KEY.' });
+      if (!aiService) {
+        return res.status(503).json({ error: 'AI service is not configured.' });
+      }
+      
+      const availability = aiService.getAvailabilityStatus();
+      if (!availability.available) {
+        return res.status(503).json({ 
+          error: availability.reason || 'AI service is not available. Please set OPENAI_API_KEY environment variable in backend/.env file.' 
+        });
       }
 
       const { raw_input } = req.body;
+      let rawText: string;
 
-      if (!raw_input || !raw_input.text) {
-        return res.status(400).json({ error: 'raw_input.text is required' });
+      // Handle both formats: { raw_input: { text: "..." } } or { raw_input: "..." }
+      if (typeof raw_input === 'string') {
+        rawText = raw_input;
+      } else if (raw_input && raw_input.text) {
+        rawText = raw_input.text;
+      } else {
+        return res.status(400).json({ error: 'raw_input (string) or raw_input.text is required' });
       }
 
-      const structured = await aiService.structureLearningMoment(raw_input.text);
+      if (!rawText || !rawText.trim()) {
+        return res.status(400).json({ error: 'raw_input cannot be empty' });
+      }
+
+      const structured = await aiService.structureLearningMoment(rawText);
       res.json(structured);
     } catch (error: any) {
       console.error('Error structuring with AI:', error);
+      
+      // Provide more specific error codes
+      if (error.message?.includes('Invalid OpenAI API key') || error.message?.includes('401')) {
+        return res.status(401).json({ error: error.message });
+      } else if (error.message?.includes('Rate limit')) {
+        return res.status(429).json({ error: error.message });
+      } else {
+        return res.status(500).json({ error: error.message || 'Failed to structure learning moment with AI' });
+      }
+    }
+  });
+
+  /**
+   * PUT /api/memory/memory-objects/:id
+   * Update a memory object
+   */
+  router.put('/memory-objects/:id', async (req: Request, res: Response) => {
+    try {
+      const memoryObject = await memoryService.updateMemoryObject(
+        req.params.id,
+        req.body
+      );
+      res.json(memoryObject);
+    } catch (error: any) {
+      console.error('Error updating memory object:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * DELETE /api/memory/memory-objects/:id
+   * Delete a memory object
+   */
+  router.delete('/memory-objects/:id', async (req: Request, res: Response) => {
+    try {
+      await memoryService.deleteMemoryObject(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting memory object:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/memory/memory-objects/:id/duplicate
+   * Duplicate a memory object
+   */
+  router.post('/memory-objects/:id/duplicate', async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id || req.body.user_id;
+      if (!userId) {
+        return res.status(400).json({ error: 'user_id is required' });
+      }
+
+      const duplicate = await memoryService.duplicateMemoryObject(
+        req.params.id,
+        userId
+      );
+      res.status(201).json(duplicate);
+    } catch (error: any) {
+      console.error('Error duplicating memory object:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * DELETE /api/memory/learning-moments/:id
+   * Delete a learning moment
+   */
+  router.delete('/learning-moments/:id', async (req: Request, res: Response) => {
+    try {
+      await memoryService.deleteLearningMoment(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      console.error('Error deleting learning moment:', error);
       res.status(500).json({ error: error.message });
     }
   });
