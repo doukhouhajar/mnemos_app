@@ -26,7 +26,3 @@ mnemos/
 - **Scheduler**: Custom implementation with SM-2-like algorithm (upgradeable)
 - **AI Integration**: OpenAI API (scoped to content generation only)
 
-## Getting Started
-
-See individual README files in backend/ and frontend/ directories.
-
